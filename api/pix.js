@@ -41,7 +41,18 @@ export default async function handler(req, res) {
         body: postData
       });
       
-      const data = await response.json();
+      let data;
+      let responseText = '';
+      try {
+        responseText = await response.text();
+        data = JSON.parse(responseText);
+      } catch (parseErr) {
+        console.error('Evopay returned non-JSON:', responseText);
+        return res.status(response.status).json({ 
+          error: 'Evopay API returned an invalid response', 
+          details: responseText 
+        });
+      }
       
       // 2. If Pix generated successfully, send event to Utmify API
       if (response.ok && data && data.qrCodeText) {
