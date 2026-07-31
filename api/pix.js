@@ -16,11 +16,18 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     
-    // Evopay API strictly validates payload and throws 400 if unknown fields exist.
-    // So we extract ONLY what it expects.
+    // Pass UTMs to callbackUrl so the webhook can retrieve them later
+    const baseUrl = 'https://vakinha-livid.vercel.app';
+    const callbackUrl = new URL(baseUrl + '/api/webhook');
+    if (payload.trackingParameters) {
+      for (const [key, val] of Object.entries(payload.trackingParameters)) {
+        if (val) callbackUrl.searchParams.set(key, val);
+      }
+    }
+
     const postData = JSON.stringify({
       amount: Number(payload.amount),
-      callbackUrl: 'https://webhook.site/placeholder'
+      callbackUrl: callbackUrl.toString()
     });
 
     try {
@@ -40,10 +47,11 @@ export default async function handler(req, res) {
       if (response.ok && data && data.qrCodeText) {
         try {
           const orderId = data.txid || data.id || ('pix_' + Date.now());
-          
-          // Format date for Utmify (YYYY-MM-DD HH:MM:SS)
           const now = new Date();
           const formattedDate = now.toISOString().replace('T', ' ').substring(0, 19);
+          
+          const amountCents = Math.round(Number(payload.amount) * 100);
+          const tParams = payload.trackingParameters || {};
 
           const utmifyPayload = {
             orderId: orderId.toString(),
@@ -51,6 +59,7 @@ export default async function handler(req, res) {
             paymentMethod: 'pix',
             status: 'waiting_payment',
             createdAt: formattedDate,
+            approvedDate: null,
             customer: {
               name: payload.customer?.name || 'Cliente',
               email: payload.customer?.email || 'cliente@email.com',
@@ -63,10 +72,25 @@ export default async function handler(req, res) {
                 id: '1',
                 name: 'Doação',
                 quantity: 1,
-                priceInCents: Math.round(Number(payload.amount) * 100)
+                priceInCents: amountCents,
+                planId: '0',
+                planName: 'Único'
               }
             ],
-            trackingParameters: payload.trackingParameters || {}
+            trackingParameters: {
+              src: tParams.src || null,
+              sck: tParams.sck || null,
+              utm_source: tParams.utm_source || null,
+              utm_campaign: tParams.utm_campaign || null,
+              utm_medium: tParams.utm_medium || null,
+              utm_content: tParams.utm_content || null,
+              utm_term: tParams.utm_term || null
+            },
+            commission: {
+              totalPriceInCents: amountCents,
+              gatewayFeeInCents: 0,
+              userCommissionInCents: amountCents
+            }
           };
 
           await fetch('https://api.utmify.com.br/api-credentials/orders', {
