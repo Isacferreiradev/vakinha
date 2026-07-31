@@ -14,11 +14,12 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    // req.body is already parsed by Vercel
-    const payload = req.body || {};
+    const payload = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     
+    // Evopay API strictly validates payload and throws 400 if unknown fields exist.
+    // So we extract ONLY what it expects.
     const postData = JSON.stringify({
-      ...payload,
+      amount: Number(payload.amount),
       callbackUrl: payload.callbackUrl || 'https://webhook.site/placeholder'
     });
 

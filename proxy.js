@@ -42,7 +42,7 @@ const server = http.createServer(function (req, res) {
       }
 
       const postData = JSON.stringify({
-        ...payload,
+        amount: Number(payload.amount),
         callbackUrl: payload.callbackUrl || 'https://webhook.site/placeholder'
       });
 
