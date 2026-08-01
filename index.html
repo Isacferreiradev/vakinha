@@ -6923,6 +6923,20 @@
       }
     })();
   </script>
+
+<script>
+  // Repassa UTMs da URL para os links de checkout
+  document.addEventListener("DOMContentLoaded", function() {
+    var urlParams = window.location.search;
+    if (urlParams) {
+      var links = document.querySelectorAll('a[href*="checkout"]');
+      links.forEach(function(link) {
+        var separator = link.href.indexOf('?') === -1 ? '?' : '&';
+        link.href = link.href + separator + urlParams.substring(1);
+      });
+    }
+  });
+</script>
 </body>
 
 </html>

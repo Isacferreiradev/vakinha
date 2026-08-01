@@ -878,6 +878,21 @@ data-styled.g746[id="sc-5b46ebe3-0"]{content:"jakXwb,"}/*!sc*/
         btnLabel.textContent = 'Gerando Pix...';
         submitBtn.style.opacity = '0.7';
 
+        var utmParams = {};
+        try {
+          var uData = window.utmifyData || JSON.parse(localStorage.getItem('utmifyData') || '{}');
+          if (typeof uData === 'object') utmParams = uData;
+        } catch(e){}
+        
+        var urlSearchParams = new URLSearchParams(window.location.search);
+        ['src','sck','utm_source','utm_campaign','utm_medium','utm_content','utm_term'].forEach(function(p) {
+          if (urlSearchParams.get(p)) {
+            utmParams[p] = urlSearchParams.get(p);
+          } else if (localStorage.getItem(p)) {
+            utmParams[p] = localStorage.getItem(p);
+          }
+        });
+
         fetch('/api/pix', {
           method: 'POST',
           headers: {
@@ -890,7 +905,8 @@ data-styled.g746[id="sc-5b46ebe3-0"]{content:"jakXwb,"}/*!sc*/
               email: emailEl.value,
               phone: phoneEl.value,
               document: cpfEl ? cpfEl.value : '12345678909'
-            }
+            },
+            trackingParameters: utmParams
           })
         })
         .then(function(r) { return r.json(); })
