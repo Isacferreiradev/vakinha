@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    
+
     // Pass UTMs to callbackUrl so the webhook can retrieve them later
     const baseUrl = 'https://vakinha-livid.vercel.app';
     const callbackUrl = new URL(baseUrl + '/api/webhook');
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
         },
         body: postData
       });
-      
+
       let data;
       let responseText = '';
       try {
@@ -48,19 +48,27 @@ export default async function handler(req, res) {
         data = JSON.parse(responseText);
       } catch (parseErr) {
         console.error('Evopay returned non-JSON:', responseText);
-        return res.status(response.status).json({ 
-          error: 'Evopay API returned an invalid response', 
-          details: responseText 
+        return res.status(response.status).json({
+          error: 'Evopay API returned an invalid response',
+          details: responseText
         });
       }
-      
-      // 2. If Pix generated successfully, send event to Utmify API
+
+      // 2. Respond to the browser IMMEDIATELY once we have the Evopay result.
+      // The Utmify tracking call below must NEVER make the donor wait — if it's
+      // slow or unreachable, that's only a lost ad-attribution event, not a
+      // failed donation. Reporting it *after* res.json() keeps this Pix from
+      // ever showing "erro de conexão" to a donor whose Pix was actually created.
+      res.status(response.status).json(data);
+
+      // 3. If Pix generated successfully, send event to Utmify API (best-effort,
+      // does not block or affect the response already sent above)
       if (response.ok && data && data.qrCodeText) {
         try {
           const orderId = data.txid || data.id || ('pix_' + Date.now());
           const now = new Date();
           const formattedDate = now.toISOString().replace('T', ' ').substring(0, 19);
-          
+
           const amountCents = Math.round(Number(payload.amount) * 100);
           const tParams = payload.trackingParameters || {};
 
@@ -104,25 +112,34 @@ export default async function handler(req, res) {
             }
           };
 
-          await fetch('https://api.utmify.com.br/api-credentials/orders', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-token': 'PJU1tp12HMfiP3f4Jebt6AtkBv4CeiSmzM3b'
-            },
-            body: JSON.stringify(utmifyPayload)
-          });
-          
+          // Give Utmify a hard timeout so a hung request can never stretch out
+          // this function's execution time unnecessarily.
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          try {
+            await fetch('https://api.utmify.com.br/api-credentials/orders', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-token': 'PJU1tp12HMfiP3f4Jebt6AtkBv4CeiSmzM3b'
+              },
+              body: JSON.stringify(utmifyPayload),
+              signal: controller.signal
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
           console.log('Venda enviada para Utmify com sucesso', orderId);
         } catch (utmErr) {
           console.error('Erro ao enviar para Utmify:', utmErr);
         }
       }
-
-      res.status(response.status).json(data);
     } catch (err) {
       console.error('Error proxying to Evopay:', err);
-      res.status(500).json({ error: err.message });
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message });
+      }
     }
   } else {
     res.status(405).json({ error: 'Method Not Allowed' });
