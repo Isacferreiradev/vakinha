@@ -911,22 +911,25 @@ data-styled.g746[id="sc-5b46ebe3-0"]{content:"jakXwb,"}/*!sc*/
             trackingParameters: utmParams
           })
         })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data && data.qrCodeText && data.qrCodeBase64) {
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, status: r.status, data: data }; }); })
+        .then(function(result) {
+          var data = result.data;
+          if (result.ok && data && data.qrCodeText && data.qrCodeBase64) {
             if (typeof fbq === 'function') {
               fbq('track', 'Purchase', { value: totalVal, currency: 'BRL' });
             }
             renderPixUI(data.qrCodeBase64, data.qrCodeText, totalVal);
           } else {
-            alert('Erro ao gerar Pix. Tente novamente.');
+            console.error('Erro ao gerar Pix. Status:', result.status, 'Resposta:', data);
+            var detail = (data && (data.error || data.message)) ? (' (' + (data.error || data.message) + ')') : '';
+            alert('Erro ao gerar Pix' + detail + '. Tente novamente.');
             submitBtn.disabled = false;
             btnLabel.textContent = originalText;
             submitBtn.style.opacity = '1';
           }
         })
         .catch(function(err) {
-          console.error(err);
+          console.error('Erro de conexão ao gerar Pix:', err);
           alert('Erro de conexão. Tente novamente.');
           submitBtn.disabled = false;
           btnLabel.textContent = originalText;
